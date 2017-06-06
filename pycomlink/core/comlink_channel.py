@@ -14,82 +14,11 @@
 import numpy as np
 import pandas as pd
 import copy
+import matplotlib.pyplot as plt
 
 
-class ComlinkChannel(object):
-    """A class for holding CML channel data and metadata"""
-
-    def __init__(self, data=None, metadata=None,
-                 t=None, rx=None, tx=None,
-                 frequency=None, polarization=None,
-                 atpc=None, channel_id=None):
-        """
-
-        Parameters
-        ----------
-
-        data: pandas.DataFrame
-            DataFrame with the columns `tx` and `rx` holding the time series
-            of the TX and RX level, respectively. The index of the DataFrame
-            must contain the time stamps. If the TX level is constant,
-            please still supply of full time series for it. You can specify
-            that the TX level is constant by passing `atpc = 'off'`.
-
-        t: list, np.array, or everything that DataFrame.__init__() digest
-
-        rx: list or np.array, or everything that DataFrame.__init__() digest
-            Timer series of RX power.
-
-        tx: list, np.array, float or int
-            Timer series of TX power. If only a scalar value is supplied,
-            it is interpreted as the constant TX power.
-
-        frequency: float
-            Frequency in Hz.
-
-        polarization: str {'h', 'v', 'H', 'V'}
-            Polarization
-
-        atpc: str {'on', 'off'}
-            Flag to specifiy if ATPC (Automatic Transmission Power Control),
-            i.e. a variable TX level, is active or not
-
-        channel_id: str
-            The ID of this channel.
-
-        metadata: dict
-           Dictionary with metadata, where this is an example of the minimum
-           of information that has to be supplied in the dict, if it is not
-           supplied seperately
-
-           {'frequency': 20 * 1e9,
-            'polarization': 'V',
-            'channel_id': 'channel_xy'
-            'atpc': 'off'}
-
-        """
-
-        # TODO: If this is not supplied we should maybe derive it somehow
-        self.sampling_type = None
-
-        # Handle the different arguments and build a DataFrame from them
-        # if it has not been supplied as `data`
-        self.data = copy.deepcopy(
-            _parse_kwargs_to_dataframe(data=data, t=t, rx=rx, tx=tx))
-
-        # TODO: Sanely parse metadata
-        if metadata is not None:
-            self.metadata = metadata
-        else:
-            self.metadata = {
-                'frequency': frequency,
-                'polarization': polarization,
-                'channel_id': channel_id,
-                'atpc': atpc}
-
-        # TODO: Remove this
-        # Keeping this for now for backwards compatibility
-        self.f_GHz = self.metadata['frequency'] / 1e9
+class ComlinkChannelBase(object):
+    """Base class for holding CML channel data and metadata"""
 
     def __eq__(self):
         pass
@@ -147,6 +76,86 @@ class ComlinkChannel(object):
         """ Return a deepcopy of this channel object """
         return self.__deepcopy__()
 
+    def plot_data(self, columns=['rx', ], ax=None, channel_number=0):
+        """ Plot time series of data from the different channels
+
+        Linked subplots will be created for the different specified columns
+        of the DataFrames of the different channels.
+
+        Parameters
+        ----------
+
+        columns : list, optional
+            List of DataFrame columns to plot for each channel.
+            Defaults to ['rx', ]
+
+        channels : list, optional
+            List of channel names, i.e. the keys of the Comlink.channels
+            dictionary, to specify which channel to plot. Defaults to None,
+            which plots for all channels
+
+        ax : matplotlib.axes, optional
+            Axes handle, defaults to None, which plots into a new figure
+
+        Returns
+        -------
+
+        ax : matplotlib.axes
+
+        """
+        if ax is None:
+            fig, ax = plt.subplots(len(columns),
+                                   1,
+                                   figsize=(10, 1.5*len(columns) + 1),
+                                   sharex=True)
+        try:
+            ax[0].get_alpha()
+        except TypeError:
+            ax = [ax, ]
+
+        for ax_i, column in zip(ax, columns):
+            if column == 'wet':
+                ax_i.fill_between(
+                    self.data[column].index,
+                    channel_number,
+                    channel_number + self.data[column].values,
+                    alpha=0.9,
+                    linewidth=0.0,
+                    label=self.metadata['channel_id'])
+            else:
+                try:
+                    self.data[column]
+                    columns_to_plot = [column,]
+                    alphas = [0.9,]
+                except KeyError:
+                    try:
+                        self.data[column + '_min']
+                        self.data[column + '_max']
+                        columns_to_plot = [column + '_min', column + '_max']
+                        alphas = [0.5, 0.9]
+                    except Exception, e:
+                        raise e
+
+                line_color = None
+                for column_i, alpha_i in zip(columns_to_plot, alphas):
+                    if line_color is None:
+                        line = ax_i.plot(
+                            self.data[column_i].index,
+                            self.data[column_i].values,
+                            alpha=alpha_i,
+                            label=self.metadata['channel_id'])
+                        line_color = line[0].get_color()
+                    else:
+                        ax_i.plot(
+                            self.data[column_i].index,
+                            self.data[column_i].values,
+                            color=line_color,
+                            alpha=alpha_i,
+                            label=self.metadata['channel_id'])
+            ax_i.set_ylabel(column)
+
+        return ax
+
     def resample(self, resampling_time, how=np.mean, inplace=False):
         """ Resample channel data
 
@@ -185,35 +194,238 @@ class ComlinkChannel(object):
         else:
             raise ValueError('`inplace` must be either True or False')
 
+    def _parse_metadata(self,
+                        metadata_dict=None,
+                        frequency=None, polarization=None,
+                        atpc=None, channel_id=None):
+        # TODO: Sanity check of metadata
+        if metadata_dict is not None:
+            self.metadata = metadata_dict
+        else:
+            self.metadata = {
+                'frequency': frequency,
+                'polarization': polarization,
+                'channel_id': channel_id,
+                'atpc': atpc}
 
-def _parse_kwargs_to_dataframe(data, t, rx, tx):
+
+class ComlinkChannel(ComlinkChannelBase):
+    """A class for holding CML channel data and metadata"""
+
+    def __init__(self, data=None, metadata=None,
+                 t=None, rx=None, tx=None,
+                 frequency=None, polarization=None,
+                 atpc=None, channel_id=None
+                 ):
+        """
+
+        Parameters
+        ----------
+
+        data: pandas.DataFrame
+            DataFrame with the columns `tx` and `rx` holding the time series
+            of the TX and RX level, respectively. The index of the DataFrame
+            must contain the time stamps. If the TX level is constant,
+            please still supply of full time series for it. You can specify
+            that the TX level is constant by passing `atpc = 'off'`.
+
+        t: list, np.array, or everything that DataFrame.__init__() digest
+
+        rx: list or np.array, or everything that DataFrame.__init__() digest
+            Timer series of RX power.
+
+        tx: list, np.array, float or int
+            Timer series of TX power. If only a scalar value is supplied,
+            it is interpreted as the constant TX power.
+
+        frequency: float
+            Frequency in Hz.
+
+        polarization: str {'h', 'v', 'H', 'V'}
+            Polarization
+
+        atpc: str {'on', 'off'}
+            Flag to specifiy if ATPC (Automatic Transmission Power Control),
+            i.e. a variable TX level, is active or not
+
+        channel_id: str
+            The ID of this channel.
+
+        metadata: dict
+           Dictionary with metadata, where this is an example of the minimum
+           of information that has to be supplied in the dict, if it is not
+           supplied seperately
+
+           {'frequency': 20 * 1e9,
+            'polarization': 'V',
+            'channel_id': 'channel_xy'
+            'atpc': 'off'}
+
+        """
+
+        # TODO: If this is not supplied we should maybe derive it somehow
+        self.sampling_type = None
+
+        # Handle the different arguments and build a DataFrame from them
+        # if it has not been supplied as `data`
+        self.data = _parse_kwargs_to_dataframe(data=data, t=t, rx=rx, tx=tx)
+        # Check if the data is there as expected
+        self.data.rx
+        self.data.tx
+
+        self._parse_metadata(metadata_dict=metadata,
+                             frequency=frequency,
+                             polarization=polarization,
+                             channel_id=channel_id,
+                             atpc=atpc)
+
+        # TODO: Remove this
+        # Keeping this for now for backwards compatibility
+        self.f_GHz = self.metadata['frequency'] / 1e9
+
+
+class ComlinkChannelMinMax(ComlinkChannelBase):
+    """A class for holding CML channel data and metadata"""
+
+    def __init__(self, data=None,
+                 t=None,
+                 rx_min=None, rx_max=None,
+                 tx_min=None, tx_max=None, tx_const=None,
+                 metadata=None,
+                 frequency=None, polarization=None,
+                 atpc=None, channel_id=None):
+        """
+
+        Parameters
+        ----------
+
+        data: pandas.DataFrame
+            DataFrame with the columns `tx` and `rx` holding the time series
+            of the TX and RX level, respectively. The index of the DataFrame
+            must contain the time stamps. If the TX level is constant,
+            please still supply of full time series for it. You can specify
+            that the TX level is constant by passing `atpc = 'off'`.
+
+        t: list, np.array, or everything that DataFrame.__init__() digest
+
+        rx_min: list or np.array, or everything that DataFrame.__init__() digest
+            Timer series of minimum RX power.
+
+        rx_max: list or np.array, or everything that DataFrame.__init__() digest
+            Timer series of maximum RX power.
+
+        tx_min: list, np.array, float or int
+            Timer series of minimum TX power.
+
+        tx_max: list, np.array, float or int
+            Timer series of minimum TX power.
+
+        tx_const: float or int
+            Constant TX power, which will be used for the whole time series
+
+        frequency: float
+            Frequency in Hz.
+
+        polarization: str {'h', 'v', 'H', 'V'}
+            Polarization
+
+        atpc: str {'on', 'off'}
+            Flag to specifiy if ATPC (Automatic Transmission Power Control),
+            i.e. a variable TX level, is active or not
+
+        channel_id: str
+            The ID of this channel.
+
+        metadata: dict
+           Dictionary with metadata, where this is an example of the minimum
+           of information that has to be supplied in the dict, if it is not
+           supplied seperately
+
+           {'frequency': 20 * 1e9,
+            'polarization': 'V',
+            'channel_id': 'channel_xy'
+            'atpc': 'off'}
+
+        """
+
+        self.sampling_type = 'min_max'
+
+        # Handle the different arguments and build a DataFrame from them
+        # if it has not been supplied as `data`
+        self.data = _parse_kwargs_to_dataframe(data=data,
+                                               t=t,
+                                               rx_min=rx_min, rx_max=rx_max,
+                                               tx_min=tx_min, tx_max=tx_max,
+                                               tx_const=tx_const)
+        # Check if the data is there as expected
+        self.data.rx_min
+        self.data.rx_max
+        self.data.tx_min
+        self.data.tx_max
+
+        self._parse_metadata(metadata_dict=metadata,
+                             frequency=frequency,
+                             polarization=polarization,
+                             channel_id=channel_id,
+                             atpc=atpc)
+
+        # TODO: Remove this
+        # Keeping this for now for backwards compatibility
+        self.f_GHz = self.metadata['frequency'] / 1e9
+
+
+def _parse_kwargs_to_dataframe(data, **kwargs):
+    min_max_levels = None
     # The case where only `t`, `rx` and `tx` are supplied
     if data is None:
-        df = pd.DataFrame(index=t, data={'rx': rx})
-        df['tx'] = tx
+        # Check that the right kwargs have been supplied
+        if set(['t', 'tx', 'rx']) == set(kwargs):
+            min_max_levels = False
+        elif (set(['t', 'tx_min', 'tx_max', 'rx_min', 'rx_max', 'tx_const']) ==
+              set(kwargs)):
+            min_max_levels = True
+        else:
+            raise ValueError('The kwargs for time, the RX- and TX-levels have '
+                             'not been supplied correctly')
+
+        if not min_max_levels:
+            df = pd.DataFrame(index=kwargs['t'],
+                              data={'rx': kwargs['rx']})
+            df['tx'] = kwargs['tx']
+        elif min_max_levels:
+            df = pd.DataFrame(index=kwargs['t'],
+                              data={'rx_min': kwargs['rx_min'],
+                                    'rx_max': kwargs['rx_max']})
+            if kwargs['tx_const'] is None:
+                df['tx_min'] = kwargs['tx_min']
+                df['tx_max'] = kwargs['tx_max']
+            elif isinstance(kwargs['tx_const'], (int, float)):
+                df['tx_min'] = kwargs['tx_const']
+                df['tx_max'] = kwargs['tx_const']
+            else:
+                raise ValueError('`tx_const` must be None, int or float')
 
     # The case where `data` has been supplied.
     # We check that `data` is a DataFrame and that the DataFrame has the
     # columns `tx` and `rx`.
-    elif data is not None:
-        if isinstance(data, pd.DataFrame):
-            # `data` is what we want, so return it
-            df = data
-            try:
-                df.tx
-            except AttributeError:
-                raise AttributeError('DataFrame `data` must have a column `tx`')
-            try:
-                df.rx
-            except AttributeError:
-                raise AttributeError('DataFrame `data` must have a column `tx`')
+    elif isinstance(data, pd.DataFrame):
+        # Check that the right column names have been supplied
+        if set(['tx', 'rx']) == set(data.columns):
+            min_max_levels = False
+        elif (set(['tx_min', 'tx_max', 'rx_min', 'rx_max']) ==
+              set(data.columns)):
+            min_max_levels = True
         else:
-            raise ValueError('type of `data` is %s, '
-                             'but must be pandas.DataFrame' % type(data))
+            raise ValueError('`data` must have the correct names for the RX-'
+                             'and TX-level columns')
+        df = copy.deepcopy(data)
 
     else:
         raise ValueError('Could not parse the supplied arguments')
 
-    df['txrx'] = df.tx - df.rx
+    if not min_max_levels:
+        df['txrx'] = df.tx - df.rx
+
     df.index.name = 'time'
+
     return df

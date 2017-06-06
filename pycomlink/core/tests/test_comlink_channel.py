@@ -3,13 +3,18 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from pycomlink.core import ComlinkChannel
+from pycomlink.core import ComlinkChannel, ComlinkChannelMinMax
 
 
 t_date_range = pd.date_range(start='2015-01-01', periods=20, freq='min')
 t_list = [str(date) for date in t_date_range]
 rx_list = list(np.sin(np.linspace(0, 10, len(t_list))))
 tx_list = list(np.cos(np.linspace(0, 10, len(t_list))))
+
+rx_list_min = list(np.sin(np.linspace(0, 10, len(t_list))))
+rx_list_max = list(1 + np.sin(np.linspace(0, 10, len(t_list))))
+tx_list_min = list(np.cos(np.linspace(0, 10, len(t_list))))
+tx_list_max = list(1 + np.cos(np.linspace(0, 10, len(t_list))))
 
 rx2_list = list(2*np.sin(np.linspace(0, 10, len(t_list))))
 tx2_list = list(2*np.cos(np.linspace(0, 10, len(t_list))))
@@ -43,6 +48,39 @@ class TestComlinkChannelInit(unittest.TestCase):
     def test_kwargs(self):
         cml_ch = ComlinkChannel(rx=rx_list, tx=tx_list, t=t_list, frequency=f)
         assert(cml_ch.f_GHz == f/1e9)
+
+
+class TestComlinkChannelMinMaxInit(unittest.TestCase):
+
+    def test_with_DataFrame_rx_and_tx(self):
+        df = pd.DataFrame(index=t_date_range,
+                          data={'rx_min': rx_list_min,
+                                'tx_min': tx_list_min,
+                                'rx_max': rx_list_max,
+                                'tx_max': tx_list_max})
+        cml_ch = ComlinkChannelMinMax(data=df, frequency=f)
+        # Test content of columns
+        np.testing.assert_almost_equal(cml_ch.rx_min.values, rx_list_min)
+        np.testing.assert_almost_equal(cml_ch.rx_max.values, rx_list_max)
+        np.testing.assert_almost_equal(cml_ch.tx_min.values, tx_list_min)
+        np.testing.assert_almost_equal(cml_ch.tx_max.values, tx_list_max)
+
+        # Test index
+        pd.util.testing.assert_almost_equal(cml_ch.index,
+                                            pd.DatetimeIndex(
+                                                t_date_range,
+                                                name='time'))
+
+    def test_with_list_rx_tx_data(self):
+        """ Test if the column name is set correctly """
+        cml_ch = ComlinkChannelMinMax(rx_min=rx_list, tx_min=tx_list,
+                                      rx_max=rx_list, tx_max=tx_list,
+                                      t=t_list,
+                                      frequency=f)
+        np.testing.assert_almost_equal(cml_ch.rx_min.values, rx_list)
+        np.testing.assert_almost_equal(cml_ch.rx_max.values, rx_list)
+        np.testing.assert_almost_equal(cml_ch.tx_min.values, tx_list)
+        np.testing.assert_almost_equal(cml_ch.tx_min.values, tx_list)
 
 
 class TestComlinkChannelAttributes(unittest.TestCase):
@@ -115,6 +153,11 @@ class TestComlinkChannelTypeAfterManipulation(unittest.TestCase):
                           data={'rx': rx_list,
                                 'tx': tx_list})
         cml_ch = ComlinkChannel(data=df, frequency=f)
+        # Add the txrx colum and rename index, since this is also done
+        # automatically in the ComlinkChannel object
+        df['txrx'] = df.tx - df.rx
+        df.index.name = 'time'
+
         cml_ch_sliced = cml_ch[1:4]
         assert(type(cml_ch_sliced) == ComlinkChannel)
         pd.util.testing.assert_frame_equal(cml_ch_sliced.data, df[1:4])

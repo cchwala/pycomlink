@@ -4,7 +4,7 @@ pycomlink subpackage imports
 
 import core
 from core.comlink import Comlink
-from core.comlink_channel import ComlinkChannel
+from core.comlink_channel import ComlinkChannel, ComlinkChannelMinMax
 
 import processing
 import io

@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import folium
 
-from comlink_channel import ComlinkChannel
+from comlink_channel import ComlinkChannelBase
 from ..processing import Processor
 from ..spatial.helper import distance
 
@@ -59,19 +59,21 @@ class Comlink(object):
                rx = kwargs.pop('rx')
                tx = kwargs.pop('tx')
 
-        elif type(channels) == ComlinkChannel:
+        elif isinstance(channels, ComlinkChannelBase):
             channels = [channels]
         elif type(channels) == list:
             for channel in channels:
                 # Duck-type to see if it behaves like a ComlinkChannel
                 try:
                     channel.data
+                    channel.metadata['frequency']
                 except Exception:
                     raise AttributeError('`channels` must behave like a '
                                          'ComlinkChannel object')
         else:
-            raise AttributeError('`channels` is %s must be either a '
-                                 'ComlinkChannel or a list of ComlinkChannels' %
+            raise AttributeError('`channels` is %s must be either a subclass '
+                                 'of ComlinkChannelBase or a list of '
+                                 'ComlinkChannels' %
                                  type(channels))
 
         # if channels are supplied, channel metadata or separate data for
@@ -284,23 +286,8 @@ class Comlink(object):
             channels_to_plot = {ch_key: self.channels[ch_key]
                                 for ch_key in channels}
 
-        for ax_i, column in zip(ax, columns):
-            for i, (name, cml_ch) in enumerate(channels_to_plot.iteritems()):
-                if column == 'wet':
-                    ax_i.fill_between(
-                        cml_ch.data[column].index,
-                        i,
-                        i + cml_ch.data[column].values,
-                        alpha=0.9,
-                        linewidth=0.0,
-                        label=name)
-                else:
-                    ax_i.plot(
-                        cml_ch.data[column].index,
-                        cml_ch.data[column].values,
-                        label=name)
-            ax_i.set_ylabel(column)
-
+        for i, (name, cml_ch) in enumerate(channels_to_plot.iteritems()):
+            cml_ch.plot_data(ax=ax, columns=columns, channel_number=i)
         return ax
 
     def get_center_lon_lat(self):
