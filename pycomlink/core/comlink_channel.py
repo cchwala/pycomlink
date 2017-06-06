@@ -76,7 +76,7 @@ class ComlinkChannelBase(object):
         """ Return a deepcopy of this channel object """
         return self.__deepcopy__()
 
-    def plot_data(self, columns=['rx', ], ax=None, channel_number=0):
+    def plot_data(self, columns=['rx', ], ax=None, channel_number=0, **kwargs):
         """ Plot time series of data from the different channels
 
         Linked subplots will be created for the different specified columns
@@ -103,6 +103,10 @@ class ComlinkChannelBase(object):
         ax : matplotlib.axes
 
         """
+
+        color = kwargs.pop('color', None)
+        line_color = color
+
         if ax is None:
             fig, ax = plt.subplots(len(columns),
                                    1,
@@ -119,6 +123,7 @@ class ComlinkChannelBase(object):
                     self.data[column].index,
                     channel_number,
                     channel_number + self.data[column].values,
+                    color=color,
                     alpha=0.9,
                     linewidth=0.0,
                     label=self.metadata['channel_id'])
@@ -136,14 +141,18 @@ class ComlinkChannelBase(object):
                     except Exception, e:
                         raise e
 
-                line_color = None
                 for column_i, alpha_i in zip(columns_to_plot, alphas):
+                    if len(columns_to_plot) > 1:
+                        label = (self.metadata['channel_id'] + '_' +
+                                 column_i.split('_')[-1])
+                    else:
+                        label = self.metadata['channel_id']
                     if line_color is None:
                         line = ax_i.plot(
                             self.data[column_i].index,
                             self.data[column_i].values,
                             alpha=alpha_i,
-                            label=self.metadata['channel_id'])
+                            label=label)
                         line_color = line[0].get_color()
                     else:
                         ax_i.plot(
@@ -151,7 +160,7 @@ class ComlinkChannelBase(object):
                             self.data[column_i].values,
                             color=line_color,
                             alpha=alpha_i,
-                            label=self.metadata['channel_id'])
+                            label=label)
             ax_i.set_ylabel(column)
 
         return ax
