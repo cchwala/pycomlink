@@ -218,13 +218,9 @@ def _parse_kwargs_to_dataframe(data, t, rx, tx):
         if isinstance(data, pd.DataFrame):
             # `data` is what we want, so return it
             df = data
-            try:
-                df.tx
-            except AttributeError:
+            if 'tx' not in df.columns:
                 raise AttributeError('DataFrame `data` must have a column `tx`')
-            try:
-                df.rx
-            except AttributeError:
+            if 'rx' not in df.columns:
                 raise AttributeError('DataFrame `data` must have a column `tx`')
         else:
             raise ValueError('type of `data` is %s, '
@@ -233,6 +229,12 @@ def _parse_kwargs_to_dataframe(data, t, rx, tx):
     else:
         raise ValueError('Could not parse the supplied arguments')
 
-    df['txrx'] = df.tx - df.rx
+    # Build a new DataFrame since this is faster than adding
+    # one column to the existing `df`
+    column_data_dict = {column_name: df[column_name].values 
+                        for column_name in df.columns}
+    column_data_dict['txrx'] = df.tx.values - df.rx.values
+    df = pd.DataFrame(index=df.index, data=column_data_dict)
+    #df['txrx'] = df.tx - df.rx
     df.index.name = 'time'
     return df
