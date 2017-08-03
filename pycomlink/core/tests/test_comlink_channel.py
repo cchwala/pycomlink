@@ -115,6 +115,7 @@ class TestComlinkChannelTypeAfterManipulation(unittest.TestCase):
                           data={'rx': rx_list,
                                 'tx': tx_list})
         cml_ch = ComlinkChannel(data=df, frequency=f)
+        df['txrx'] = df.tx - df.rx
         cml_ch_sliced = cml_ch[1:4]
         assert(type(cml_ch_sliced) == ComlinkChannel)
         pd.util.testing.assert_frame_equal(cml_ch_sliced.data, df[1:4])
