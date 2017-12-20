@@ -9,4 +9,6 @@
 # Licence:      The MIT License
 #----------------------------------------------------------------------------
 
-import validator
+from __future__ import absolute_import
+from . import validator
+from . import stats
