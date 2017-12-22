@@ -215,6 +215,7 @@ def _parse_kwargs_to_dataframe(data, t, rx, tx):
     if data is None:
         df = pd.DataFrame(index=t, data={'rx': rx})
         df['tx'] = tx
+        df['txrx'] = df.tx - df.rx
 
     # The case where `data` has been supplied.
     # We check that `data` is a DataFrame and that the DataFrame has the
@@ -227,6 +228,8 @@ def _parse_kwargs_to_dataframe(data, t, rx, tx):
                 raise AttributeError('DataFrame `data` must have a column `tx`')
             if 'rx' not in df.columns:
                 raise AttributeError('DataFrame `data` must have a column `tx`')
+            if 'txrx' not in df.columns:
+                df['txrx'] = df.tx.values - df.rx.values
         else:
             raise ValueError('type of `data` is %s, '
                              'but must be pandas.DataFrame' % type(data))
@@ -236,10 +239,9 @@ def _parse_kwargs_to_dataframe(data, t, rx, tx):
 
     # Build a new DataFrame since this is faster than adding
     # one column to the existing `df`
-    column_data_dict = {column_name: df[column_name].values 
-                        for column_name in df.columns}
-    column_data_dict['txrx'] = df.tx.values - df.rx.values
-    df = pd.DataFrame(index=df.index, data=column_data_dict)
-    #df['txrx'] = df.tx - df.rx
+    #column_data_dict = {column_name: df[column_name].values
+    #                    for column_name in df.columns}
+    #column_data_dict['txrx'] = df.tx.values - df.rx.values
+    #df = pd.DataFrame(index=df.index, data=column_data_dict)
     df.index.name = 'time'
     return df
