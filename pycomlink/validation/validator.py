@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from shapely.geometry import LineString, Polygon
 
-from pycomlink.util.maintenance import deprecated
+from ..util.maintenance import deprecated
 
 
 class Validator(object):
