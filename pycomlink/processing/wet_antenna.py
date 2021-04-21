@@ -16,7 +16,7 @@ import numpy as np
 import scipy.interpolate
 from numba import jit
 
-from pycomlink.processing import k_R_relation
+from . import k_R_relation
 from .xarray_wrapper import xarray_loop_vars_over_dim
 
 
