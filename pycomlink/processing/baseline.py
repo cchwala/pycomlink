@@ -4,7 +4,7 @@ import pandas as pd
 
 from numba import jit
 
-from .xarray_wrapper import xarray_loop_vars_over_dim
+from .xarray_wrapper import xarray_apply_along_time_dim
 
 
 ################################################
@@ -12,7 +12,7 @@ from .xarray_wrapper import xarray_loop_vars_over_dim
 ################################################
 
 
-@xarray_loop_vars_over_dim(vars_to_loop=["trsl", "wet"], loop_dim="channel_id")
+@xarray_apply_along_time_dim()
 def baseline_constant(trsl, wet, n_average_last_dry=1):
     """
     Build baseline with constant level during a `wet` period
@@ -55,9 +55,9 @@ def _numba_baseline_constant(trsl, wet, n_average_last_dry):
     for i in range(n_average_last_dry, len(trsl)):
         if np.isnan(wet[i]):
             baseline[i] = np.NaN
-        elif wet[i] & ~wet[i-1]:
-            baseline[i] = np.mean(baseline[(i-n_average_last_dry) : i])
-        elif wet[i] & wet[i-1]:
+        elif wet[i] & ~wet[i - 1]:
+            baseline[i] = np.mean(baseline[(i - n_average_last_dry) : i])
+        elif wet[i] & wet[i - 1]:
             baseline[i] = baseline[i - 1]
         else:
             baseline[i] = trsl[i]
@@ -71,18 +71,22 @@ def baseline_linear(rsl, wet, ignore_nan=False):
     Parameters
     ----------
     rsl : numpy.array or pandas.Series
-          Received signal level or transmitted signal level minus received
+        Received signal level or transmitted signal level minus received
           signal level
     wet : numpy.array or pandas.Series
-          Information if classified index of times series is wet (True)
-          or dry (False). Note that `NaN`s in `wet` will lead to `NaN`s in
-          `baseline` also after the `NaN` period since it is then not clear
-          wheter there was a change of wet/dry within the `NaN` period.
+        Information if classified index of times series is wet (True)
+        or dry (False). Note that `NaN`s in `wet` will lead to `NaN`s in
+        `baseline` also after the `NaN` period since it is then not clear
+        wheter there was a change of wet/dry within the `NaN` period.
+    ignore_nan : bool
+        If set to True the last wet/dry state before a NaN will be used for deriving
+        the baseline. If set to False, the baseline for any wet period which contains
+        a NaN will be set to NaN for the duration of the wet period. Default is False.
 
     Returns
     -------
     baseline : numpy.array
-          Baseline during wet period
+        Baseline during wet period
 
     """
 

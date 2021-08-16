@@ -16,8 +16,8 @@ import numpy as np
 import scipy.interpolate
 from numba import jit
 
-from . import k_R_relation
-from .xarray_wrapper import xarray_loop_vars_over_dim
+from pycomlink.processing import k_R_relation
+from .xarray_wrapper import xarray_apply_along_time_dim
 
 
 ########################################
@@ -63,9 +63,7 @@ def _numba_waa_schleiss_2013(rsl, baseline, wet, waa_max, delta_t, tau):
     return waa
 
 
-@xarray_loop_vars_over_dim(
-    vars_to_loop=["rsl", "baseline", "wet"], loop_dim="channel_id"
-)
+@xarray_apply_along_time_dim()
 def waa_schleiss_2013(rsl, baseline, wet, waa_max, delta_t, tau):
     """Calculate WAA according to Schleiss et al 2013
 
@@ -95,7 +93,7 @@ def waa_schleiss_2013(rsl, baseline, wet, waa_max, delta_t, tau):
 
     References
     ----------
-    .. [1[ Schleiss, M., Rieckermann, J. and Berne, A.: "Quantification and
+    .. [1] Schleiss, M., Rieckermann, J. and Berne, A.: "Quantification and
                 modeling of wet-antenna attenuation for commercial microwave
                 links", IEEE Geoscience and Remote Sensing Letters, 10, 2013
     """
@@ -112,6 +110,7 @@ def waa_schleiss_2013(rsl, baseline, wet, waa_max, delta_t, tau):
     return waa
 
 
+@xarray_apply_along_time_dim()
 def waa_leijnse_2008_from_A_obs(
     A_obs,
     f_Hz,
@@ -125,10 +124,10 @@ def waa_leijnse_2008_from_A_obs(
     """Calculate wet antenna attenuation according to Leijnse et al. 2008
 
     Calculate the wet antenna attenuation from observed attenuation,
-    using the method proposed in [1]_, assuming a rain rate dependent
+    using the method proposed in [2]_, assuming a rain rate dependent
     thin flat water film on the antenna.
 
-    The equations proposed in [1]_ calculate the WAA from the rain rate R.
+    The equations proposed in [2]_ calculate the WAA from the rain rate R.
     With CML data the rain rates is not directly available. We need to use
     the observed attenuation to derive the WAA. This is done here by building
     a look-up-table for the relation between A_obs and WAA, where A_obs is
@@ -161,7 +160,7 @@ def waa_leijnse_2008_from_A_obs(
     References
     ----------
 
-    ..[1]  H. Leijnse, R. Uijlenhoet, J.N.M. Stricker: "Microwave link rainfall
+    .. [2]  H. Leijnse, R. Uijlenhoet, J.N.M. Stricker: "Microwave link rainfall
            estimation: Effects of link length and frequency, temporal sampling,
            power resolution, and wet antenna attenuation", Advances in
            Water Resources, Volume 31, Issue 11, 2008, Pages 1481-1493,
@@ -169,11 +168,19 @@ def waa_leijnse_2008_from_A_obs(
 
     """
 
+    if np.any(A_obs < 0):
+        raise ValueError("Negative values for `A_obs` are not allowed")
+
+    # Make sure that L_km is not an array or xarray.Dataarray with a size greater
+    # than 1, i.e. it has to be a single scalar values. This is required so that
+    # the xarray wrapper does not fail.
+    L_km = float(L_km)
+
     # Generate mapping from A_obs to WAA
     A_rain = np.logspace(-10, 3, 100)
     A_rain[0] = 0
 
-    R = k_R_relation.calc_R_from_A(A_rain, L_km=L_km, f_GHz=f_Hz / 1e9, R_min=0)
+    R = k_R_relation.calc_R_from_A(A=A_rain, L_km=L_km, f_GHz=f_Hz / 1e9, R_min=0)
     waa = waa_leijnse_2008(
         f_Hz=f_Hz,
         R=R,
@@ -203,7 +210,7 @@ def waa_leijnse_2008(
     """Calculate wet antenna attenuation according to Leijnse et al. 2008
 
     Calculate the wet antenna attenuation assuming a rain rate dependent
-    thin flat water film on the antenna following the results from [1].
+    thin flat water film on the antenna following the results from [3]_.
 
     Water film thickness:
         l = gamma * R ** delta
@@ -232,7 +239,7 @@ def waa_leijnse_2008(
     References
     ----------
 
-    ..[1]  H. Leijnse, R. Uijlenhoet, J.N.M. Stricker: "Microwave link rainfall
+    .. [3]  H. Leijnse, R. Uijlenhoet, J.N.M. Stricker: "Microwave link rainfall
            estimation: Effects of link length and frequency, temporal sampling,
            power resolution, and wet antenna attenuation", Advances in
            Water Resources, Volume 31, Issue 11, 2008, Pages 1481-1493,
